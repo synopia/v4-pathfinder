@@ -929,6 +929,8 @@
    </PIN>
    <PIN pinname="Output 1" visible="1">
    </PIN>
+   <PIN pinname="Initialize" slicecount="1" visible="1" values="0">
+   </PIN>
    </NODE>
    <LINK srcnodeid="46" srcpinname="Output" dstnodeid="106" dstpinname="Default 1">
    </LINK>
@@ -1237,7 +1239,7 @@
    </BOUNDS>
    <PIN pinname="Output" visible="1">
    </PIN>
-   <PIN pinname="Period" slicecount="5" values="1.53846153846154,1.16279069767442,1.81818181818182,5.88235294117647,3.44827586206897" visible="1">
+   <PIN pinname="Period" slicecount="5" visible="1" values="1.53846153846154,1.16279069767442,1.81818181818182,5.88235294117647,3.44827586206897">
    </PIN>
    <PIN pinname="Reverse" slicecount="1" values="1">
    </PIN>
@@ -1269,5 +1271,13 @@
    <LINK srcnodeid="134" srcpinname="Output" dstnodeid="132" dstpinname="Period">
    </LINK>
    <LINK srcnodeid="123" srcpinname="Output" dstnodeid="124" dstpinname="Input">
+   </LINK>
+   <NODE systemname="OnOpen (VVVV)" nodename="OnOpen (VVVV)" componentmode="Hidden" id="135">
+   <BOUNDS type="Node" left="4935" top="3795" width="100" height="100">
+   </BOUNDS>
+   <PIN pinname="Bang" visible="1">
+   </PIN>
+   </NODE>
+   <LINK srcnodeid="135" srcpinname="Bang" dstnodeid="106" dstpinname="Initialize">
    </LINK>
    </PATCH>
