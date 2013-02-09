@@ -108,8 +108,7 @@ namespace VVVV.Nodes
 			int i=0;
 			for( var y=0; y<mapY; y++ ) {
 				for( var x=0; x<mapX; x++ ) {
-	//				map[i] = Pmap[i] ? 1 : 0;
-					map[i] = 0;
+					map[i] = Pmap[i] ? 1 : 0;
 					i++;
 				}
 			}
