@@ -58,17 +58,15 @@ namespace VVVV.Nodes
 			
 			FPathOut.SliceCount = SpreadMax;
 //			FLogger.Log(LogType.Debug, SpreadMax.ToString());
+			bool mapHasChanged = false;
+			if( FUpdate[0] || FPathFinder==null ) {
+				FPathFinder = new Pathfinder(FMapSize[0], FMapSize[1], FMapIn);
+				FPathFinder.SetLogger(FLogger);
+				mapHasChanged = true;
+			}
+
 			for (int i=0;i<SpreadMax;i++) {
-				bool change = false;
-				if( FUpdate[i] || FPathFinder == null)
-				{
-					FPathFinder = new Pathfinder(FMapSize[i*2], FMapSize[i*2+1], FMapIn);
-					FPathFinder.SetLogger(FLogger);
-				
-					change = true;
-				}
-					
-				if (FStart.IsChanged || FTarget.IsChanged || change) {
+				if (FStart.IsChanged || FTarget.IsChanged || mapHasChanged) {
 					IEnumerable<Vector2D> pathToDisplay = null;
 					pathToDisplay = FPathFinder.FindPath( FStart[i], FTarget[i], FMaxSize[0] );
 					FPathOut[i].SliceCount=0;
@@ -87,6 +85,7 @@ namespace VVVV.Nodes
 		int[] map;
 		double[] gMap;
 		double[] fMap;
+		int[] ageMap;
 		int[] predecessorMap;
 		int FSizeX;
 		int FSizeY;
@@ -95,6 +94,7 @@ namespace VVVV.Nodes
 		BinaryHeap openList;
 		ISet<int> closeList;
 		
+		int age;
 		int targetX;
 		int targetY;
 		
@@ -117,14 +117,7 @@ namespace VVVV.Nodes
 				{-1,0, 1},			 {1,0, 1},
 				{-1,+1, 2},{0,+1, 1},{1,+1, 2}
 			};
-		}
-		
-		public IEnumerable<Vector2D> FindPath( Vector2D start, Vector2D target, double maxHeap = 1.0 ) {
-			int maxCount = (int) Math.Floor(FSizeX * FSizeY * maxHeap);
-			int origMaxCount = maxCount;
-			
-			targetX = VMath.Zmod((int)target.x, FSizeX);  // Wrap X within Map
-			targetY = VMath.Zmod((int)target.y, FSizeY);  // Wrap Y within Map
+			ageMap = new int[FSizeX*FSizeY];
 			gMap = new double[FSizeY*FSizeX];
 			fMap = new double[FSizeY*FSizeX];
 			predecessorMap = new int[FSizeY*FSizeX];
@@ -133,12 +126,27 @@ namespace VVVV.Nodes
 			}, FSizeX*FSizeY, FSizeX*FSizeY);
 			closeList = new HashSet<int>();
 			
+			age = 0;
+		}
+		
+		public IEnumerable<Vector2D> FindPath( Vector2D start, Vector2D target, double maxHeap = 1.0 ) {
+			int maxCount = (int) Math.Floor(FSizeX * FSizeY * maxHeap);
+			int origMaxCount = maxCount;
+			
+			targetX = VMath.Zmod((int)target.x, FSizeX);  // Wrap X within Map
+			targetY = VMath.Zmod((int)target.y, FSizeY);  // Wrap Y within Map
+			
+			openList.Clear();
+			closeList.Clear();
+			age ++;
+			
 			int currentNode;
 			int targetNode = Index(target);
 			openList.Add(Index(start));
 			bool found = false;
-			while( maxCount>0 && openList.GetSize()>0 ) {
-				
+			gMap[openList.Min()]=0;
+			ageMap[openList.Min()]=0;
+			while( maxCount>0 && openList.GetSize()>0 ) {				
 				currentNode = openList.RemoveMin();
 				if( currentNode==targetNode ) {
 					found = true;
@@ -199,13 +207,14 @@ namespace VVVV.Nodes
 				}
 				
 				double tentative_g = gMap[currentNode] + cost( currentNode, neighbourNode, neighbours[i,2] );
-				if( openList.Contains(neighbourNode) && tentative_g>=gMap[neighbourNode] ) {
+				if( openList.Contains(neighbourNode) && ageMap[neighbourNode]==age && tentative_g>=gMap[neighbourNode] ) {
 					continue;
 				}
 				
 				predecessorMap[neighbourNode] = currentNode;
 				gMap[neighbourNode] = tentative_g;
 				fMap[neighbourNode] = tentative_g + heuristic( neighbourNode );
+				ageMap[neighbourNode] = age;
 				if( !openList.Contains(neighbourNode) ) {
 					openList.Add(neighbourNode);
 				} else {
@@ -277,6 +286,10 @@ namespace VVVV.Nodes
 			FHeap[last] = item;
 			FItemToIndex[item] = last;
 			ResortUp(last);
+		}
+		
+		public int Min() {
+			return FHeap[0];
 		}
 		
 		public int RemoveMin() {
