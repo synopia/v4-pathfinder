@@ -125,7 +125,7 @@ namespace VVVV.Nodes
 				return fMap[a]<fMap[b] ? +1 : fMap[a]>fMap[b] ? -1 : 0;
 			}, FSizeX*FSizeY, FSizeX*FSizeY);
 			closeList = new HashSet<int>();
-			
+			predecessorMap = new int[FSizeY*FSizeX];
 			age = 0;
 		}
 		
@@ -136,6 +136,9 @@ namespace VVVV.Nodes
 			targetX = VMath.Zmod((int)target.x, FSizeX);  // Wrap X within Map
 			targetY = VMath.Zmod((int)target.y, FSizeY);  // Wrap Y within Map
 			
+			for( int i=0;i<predecessorMap.Length; i++) {
+				predecessorMap[i]=0;
+			}
 			openList.Clear();
 			closeList.Clear();
 			age ++;
@@ -145,7 +148,7 @@ namespace VVVV.Nodes
 			openList.Add(Index(start));
 			bool found = false;
 			gMap[openList.Min()]=0;
-			ageMap[openList.Min()]=0;
+			ageMap[openList.Min()]=age;
 			while( maxCount>0 && openList.GetSize()>0 ) {				
 				currentNode = openList.RemoveMin();
 				if( currentNode==targetNode ) {
