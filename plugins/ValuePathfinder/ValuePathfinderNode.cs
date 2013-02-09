@@ -14,7 +14,7 @@ using VVVV.Core.Logging;
 namespace VVVV.Nodes
 {
 	#region PluginInfo
-	[PluginInfo(Name = "Pathfinder", Category = "Value", Help = "Basic template with one value in/out", Tags = "")]
+	[PluginInfo(Name = "Pathfinder", Category = "Value", Help = "Find shortest Path through a Grid with Obstacles", Tags = "AStar, velcrome, synopia")]
 	#endregion PluginInfo
 	public class ValuePathfinderNode : IPluginEvaluate
 	{
