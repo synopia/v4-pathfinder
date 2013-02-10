@@ -1,6 +1,6 @@
 <!DOCTYPE PATCH  SYSTEM "http://vvvv.org/versions/vvvv45beta29.dtd" >
-   <PATCH nodename="C:\dev\vvvv\PathFinder\AStar.v4p" systemname="astar" filename="C:\Users\Paul\Desktop\astar.v4p" bgcolor="15329769">
-   <BOUNDS type="Window" left="2820" top="300" width="15405" height="12705">
+   <PATCH nodename="C:\dev\vvvv\PathFinder\astar.v4p" systemname="astar" filename="C:\Users\Paul\Desktop\astar.v4p" bgcolor="15329769">
+   <BOUNDS type="Window" left="18315" top="300" width="10485" height="15480">
    </BOUNDS>
    <NODE systemname="IOBox (Value Advanced)" nodename="IOBox (Value Advanced)" componentmode="InABox" id="3">
    <BOUNDS type="Node" left="14655" top="1650" width="100" height="100">
@@ -401,7 +401,7 @@
    </BOUNDS>
    <BOUNDS type="Box" left="4575" top="12015" width="2400" height="1800">
    </BOUNDS>
-   <BOUNDS type="Window" left="22410" top="4980" width="9840" height="7650">
+   <BOUNDS type="Window" left="7620" top="3540" width="9840" height="7650">
    </BOUNDS>
    <PIN pinname="Layers" visible="1">
    </PIN>
