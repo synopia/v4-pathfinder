@@ -84,7 +84,7 @@ namespace VVVV.Nodes
 		ILogger FLogger;
 		
 		IDictionary<int, Slot> FSlots = new Dictionary<int, Slot>();
-		Queue<Path> FPathQueue = new Queue<Path>();
+		ISet<Path> FPathQueue = new HashSet<Path>();
 		bool running;
 		
 		public PathfindingService(ILogger logger) {
@@ -112,8 +112,17 @@ namespace VVVV.Nodes
 			
 			int startNode = Index( startX, startY );
 			int targetNode = Index(targetX, targetY );
-
-			slot.Update(startNode, targetNode, maxHeapSize);
+			var p = slot.PathId();
+			bool update = slot.Update(startNode, targetNode, maxHeapSize);
+			if( p!=null && update ) {
+				_rw.EnterWriteLock();
+				Path path = GetPath(p, maxHeapSize);
+				if( FPathQueue.Contains(path) ) {
+					FPathQueue.Remove(path);
+				}
+				_rw.ExitWriteLock();
+			}
+			
 		}
 		
 		public void ThreadLoop() {
@@ -122,24 +131,21 @@ namespace VVVV.Nodes
 			while( running ) {
 				Thread.Sleep(0);
 				_rw.EnterReadLock();
-				int cnt = FPathQueue.Count;
+				var e = FPathQueue.GetEnumerator();
+				Path path = null;
+				if( e.MoveNext() ) {
+					path = e.Current;
+				}
 				_rw.ExitReadLock();
-				if( cnt==0 ) {
+				if( path==null ) {
 					continue;
 				}
-				FLogger.Log(LogType.Debug, "processing item, queue="+cnt);
-				_rw.EnterReadLock();
-				Path path = FPathQueue.Peek();
-				_rw.ExitReadLock();
-				
-				FLogger.Log(LogType.Debug, "pathid "+path);
-				
 //				Thread.Sleep(1000);
 				path.FindPath( FPathFinder );
 
 				_rw.EnterWriteLock();
-				if( path!=FPathQueue.Dequeue() ) {
-					FLogger.Log(LogType.Debug, "error");
+				if( FPathQueue.Contains(path) ) {
+					FPathQueue.Remove(path);
 				}
 				_rw.ExitWriteLock();
 			}
@@ -156,19 +162,16 @@ namespace VVVV.Nodes
 //					IEnumerable<int> pathToDisplay = path.FindPath(FPathFinder)
 					
 					if( pathToDisplay!=null ) {
-						FLogger.Log(LogType.Debug, "rendering "+slotId);
 						result[slotId].SliceCount=0;						
 						foreach( int step in pathToDisplay ) {
 							result[slotId].Add(new Vector2D(step%FSizeX, step/FSizeX));
 						}
-						FLogger.Log(LogType.Debug, "path len "+result[slotId].SliceCount);
 						slot.SetRendered();
 					} else {
 						_rw.EnterWriteLock();
 						if( !FPathQueue.Contains(path) ) {
-							FPathQueue.Enqueue(path);
-							FLogger.Log(LogType.Debug, "queue="+FPathQueue.Count);
-						}						
+							FPathQueue.Add(path);
+						}
 						_rw.ExitWriteLock();
 					}					
 				} 
@@ -212,13 +215,16 @@ namespace VVVV.Nodes
 		private Tuple<int,int> pathId;		
 		private bool rendered;
 		
-		public void Update( int startNode, int targetNode, double maxHeapSize ) {
+		public bool Update( int startNode, int targetNode, double maxHeapSize ) {
 			if( startNode!=this.startNode || targetNode!=this.targetNode || maxHeapSize!=this.maxHeapSize ) {
 				this.startNode = startNode;
 				this.targetNode = targetNode;
 				this.maxHeapSize = maxHeapSize;
 				this.rendered = false;
 				pathId = new Tuple<int,int>(startNode, targetNode);
+				return true;
+			} else {
+				return false;
 			}
 		}
 		public bool IsRendered() { return rendered; }
@@ -296,7 +302,6 @@ namespace VVVV.Nodes
 		
 		public IEnumerable<int> FindPath( int startNode, int targetNode, double maxHeap = 1.0 ) {
 			int maxCount = (int) Math.Floor(FSizeX * FSizeY * maxHeap);
-			FLogger.Log(LogType.Debug,"astar "+startNode+" -> "+targetNode+", "+maxCount);
 			
 			openList.Clear();
 			closeList.Clear();
