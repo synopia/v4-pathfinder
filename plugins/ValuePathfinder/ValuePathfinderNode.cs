@@ -17,7 +17,7 @@ namespace VVVV.Nodes
 	#region PluginInfo
 	[PluginInfo(Name = "Pathfinder", Category = "Value", Help = "Find shortest Path through a Grid with Obstacles", Tags = "AStar, velcrome, synopia")]
 	#endregion PluginInfo
-	public class ValuePathfinderNode : IPluginEvaluate
+	public class ValuePathfinderNode : IPluginEvaluate, IDisposable
 	{
 		#region fields & pins
 		[Config("Limit Size of SearchHeap", DefaultValue = 1, MinValue = 0.0, MaxValue = 1.0 )] 
@@ -77,6 +77,10 @@ namespace VVVV.Nodes
 			}
 			FPathfindingService.Update(FPathOut, FPathValid);
 		}
+		
+		public void Dispose() {			
+			FPathfindingService.Stop();
+		}
 	}
 	
 	class PathfindingService {
@@ -96,7 +100,9 @@ namespace VVVV.Nodes
 			running = true;
 			new Thread(ThreadLoop).Start();
 		} 
-		~ PathfindingService() {
+		
+		
+		public void Stop() {
 			running = false;
 		}
 		
