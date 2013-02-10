@@ -2,6 +2,7 @@
 using System;
 using System.ComponentModel.Composition;
 using System.Collections.Generic;
+using System.Threading;
 
 using VVVV.PluginInterfaces.V1;
 using VVVV.PluginInterfaces.V2;
@@ -43,41 +44,205 @@ namespace VVVV.Nodes
 		[Import()]
 		ILogger FLogger;
 		
-		Pathfinder FPathFinder;
-		
+		PathfindingService FPathfindingService = null;
 		#endregion fields & pins
 
-		
 		//called when data for any output pin is requested
 		public void Evaluate(int SpreadMax)
 		{
-			SpreadMax = (int)Math.Ceiling( FMapSize.SliceCount/2.0);
-			SpreadMax = Math.Max(SpreadMax, FUpdate.SliceCount);
+			SpreadMax = 0;
 			SpreadMax = Math.Max(SpreadMax, FStart.SliceCount);
 			SpreadMax = Math.Max(SpreadMax, FTarget.SliceCount);
 			
 			FPathOut.SliceCount = SpreadMax;
 //			FLogger.Log(LogType.Debug, SpreadMax.ToString());
+			
 			bool mapHasChanged = false;
-			if( FUpdate[0] || FPathFinder==null ) {
-				FPathFinder = new Pathfinder(FMapSize[0], FMapSize[1], FMapIn);
-				FPathFinder.SetLogger(FLogger);
+			if( FPathfindingService==null ) {
+				FPathfindingService = new PathfindingService(FLogger);
+				mapHasChanged = true;
+			}
+			
+			if( FUpdate[0] || mapHasChanged ) {
+				FPathfindingService.UpdateMap(FMapSize, FMapIn);
 				mapHasChanged = true;
 			}
 
 			for (int i=0;i<SpreadMax;i++) {
-				if (FStart.IsChanged || FTarget.IsChanged || mapHasChanged) {
-					IEnumerable<Vector2D> pathToDisplay = null;
-					pathToDisplay = FPathFinder.FindPath( FStart[i], FTarget[i], FMaxSize[0] );
-					FPathOut[i].SliceCount=0;
-					if( pathToDisplay!=null ) {
-						foreach( Vector2D step in pathToDisplay ) {
-							FPathOut[i].Add(step);
-						}
-						
-					}
-				}
+				FPathfindingService.SetPath(i, FStart[i], FTarget[i], FMaxSize[i]);
 			}
+			FPathfindingService.Update(FPathOut);
+		}
+	}
+	
+	class PathfindingService {
+		ReaderWriterLockSlim _rw = new ReaderWriterLockSlim();
+		Pathfinder FPathFinder;
+		int FSizeX;
+		int FSizeY;
+		IDictionary<Tuple<int,int>,Path> FPathes = new Dictionary<Tuple<int,int>,Path>();
+		ILogger FLogger;
+		
+		IDictionary<int, Slot> FSlots = new Dictionary<int, Slot>();
+		Queue<Path> FPathQueue = new Queue<Path>();
+		bool running;
+		
+		public PathfindingService(ILogger logger) {
+			FLogger = logger;
+			running = true;
+			new Thread(ThreadLoop).Start();
+		} 
+		~ PathfindingService() {
+			running = false;
+		}
+		
+		public void SetPath( int slotId, Vector2D start, Vector2D target, double maxHeapSize ) {
+			Slot slot;
+			if( FSlots.ContainsKey(slotId) ) {
+				slot = FSlots[slotId];
+			} else {
+				slot = new Slot();
+				FSlots.Add(slotId, slot);
+			}
+			int targetX = VMath.Zmod((int)target.x, FSizeX);  // Wrap X within Map
+			int targetY = VMath.Zmod((int)target.y, FSizeY);  // Wrap Y within Map
+			
+			int startX = VMath.Zmod((int)start.x, FSizeX);
+			int startY = VMath.Zmod((int)start.y, FSizeY);
+			
+			int startNode = Index( startX, startY );
+			int targetNode = Index(targetX, targetY );
+
+			slot.Update(startNode, targetNode, maxHeapSize);
+		}
+		
+		public void ThreadLoop() {
+			
+			FLogger.Log(LogType.Debug, "thread started");
+			while( running ) {
+				Thread.Sleep(0);
+				_rw.EnterReadLock();
+				int cnt = FPathQueue.Count;
+				_rw.ExitReadLock();
+				if( cnt==0 ) {
+					continue;
+				}
+				FLogger.Log(LogType.Debug, "processing item, queue="+cnt);
+				_rw.EnterReadLock();
+				Path path = FPathQueue.Peek();
+				_rw.ExitReadLock();
+				
+				FLogger.Log(LogType.Debug, "pathid "+path);
+				
+//				Thread.Sleep(1000);
+				path.FindPath( FPathFinder );
+
+				_rw.EnterWriteLock();
+				if( path!=FPathQueue.Dequeue() ) {
+					FLogger.Log(LogType.Debug, "error");
+				}
+				_rw.ExitWriteLock();
+			}
+			FLogger.Log(LogType.Debug, "thread ended");
+		}
+		
+		public void Update(ISpread<ISpread<Vector2D>> result) {
+			foreach( int slotId in FSlots.Keys ) {
+				result[slotId].Add(new Vector2D(0,0));
+				Slot slot = FSlots[slotId];
+				if( !slot.IsRendered() ) {
+					Path path = GetPath( slot.PathId(), slot.maxHeapSize );
+					IEnumerable<int> pathToDisplay = path.GetData();
+//					IEnumerable<int> pathToDisplay = path.FindPath(FPathFinder)
+					
+					if( pathToDisplay!=null ) {
+						FLogger.Log(LogType.Debug, "rendering "+slotId);
+						result[slotId].SliceCount=0;						
+						foreach( int step in pathToDisplay ) {
+							result[slotId].Add(new Vector2D(step%FSizeX, step/FSizeX));
+						}
+						FLogger.Log(LogType.Debug, "path len "+result[slotId].SliceCount);
+						slot.SetRendered();
+					} else {
+						_rw.EnterWriteLock();
+						if( !FPathQueue.Contains(path) ) {
+							FPathQueue.Enqueue(path);
+							FLogger.Log(LogType.Debug, "queue="+FPathQueue.Count);
+						}						
+						_rw.ExitWriteLock();
+					}					
+				} 
+			}
+		}
+		
+		private Path GetPath( Tuple<int,int> pathId, double maxHeapSize ) {
+			Path path;
+			if( FPathes.ContainsKey(pathId) ) {
+				path = FPathes[pathId];
+			} else {
+				path = new Path(pathId.Item1, pathId.Item2);
+				path.maxHeapSize = maxHeapSize;
+				FPathes.Add(pathId, path);
+			}			
+			return path;
+		}
+		
+		public void UpdateMap(ISpread<int> mapSize, ISpread<bool> map ) {
+			FSizeX = mapSize[0];
+			FSizeY = mapSize[1];
+			FPathFinder = new Pathfinder(mapSize[0], mapSize[1], map);
+			FPathFinder.SetLogger(FLogger);
+			FPathes.Clear();
+			foreach( Slot slot in FSlots.Values ) {
+				slot.SetRendered(false);
+			}
+		}
+		
+		private int Index( int x, int y ) {
+			return FPathFinder.Index(x,y);
+		}
+		private int Index( Vector2D pos ) {
+			return Index( (int)pos.x, (int)pos.y );
+		}
+	}
+	class Slot {
+		private int startNode;
+		private int targetNode;
+		public double maxHeapSize{get;set;}
+		private Tuple<int,int> pathId;		
+		private bool rendered;
+		
+		public void Update( int startNode, int targetNode, double maxHeapSize ) {
+			if( startNode!=this.startNode || targetNode!=this.targetNode || maxHeapSize!=this.maxHeapSize ) {
+				this.startNode = startNode;
+				this.targetNode = targetNode;
+				this.maxHeapSize = maxHeapSize;
+				this.rendered = false;
+				pathId = new Tuple<int,int>(startNode, targetNode);
+			}
+		}
+		public bool IsRendered() { return rendered; }
+		public void SetRendered(bool v=true) { rendered = v; }
+		public Tuple<int,int> PathId() { return pathId; }
+	}
+	class Path {
+		private int startNode;
+		private int targetNode;
+		public double maxHeapSize{
+			get;set;
+		}
+		private IEnumerable<int> path;
+		
+		public Path( int startNode, int targetNode ) {
+			this.startNode = startNode;
+			this.targetNode = targetNode;
+		}
+		
+		public IEnumerable<int> GetData() { return path; }
+		public bool HasData() {	return path!=null; }
+		public void SetData( IEnumerable<int> path ) {this.path = path;}
+		public void FindPath(Pathfinder finder){
+			path = finder.FindPath( startNode, targetNode, maxHeapSize );
 		}
 	}
 	
@@ -129,43 +294,42 @@ namespace VVVV.Nodes
 			age = 0;
 		}
 		
-		public IEnumerable<Vector2D> FindPath( Vector2D start, Vector2D target, double maxHeap = 1.0 ) {
+		public IEnumerable<int> FindPath( int startNode, int targetNode, double maxHeap = 1.0 ) {
 			int maxCount = (int) Math.Floor(FSizeX * FSizeY * maxHeap);
-			int origMaxCount = maxCount;
+			FLogger.Log(LogType.Debug,"astar "+startNode+" -> "+targetNode+", "+maxCount);
 			
-			targetX = VMath.Zmod((int)target.x, FSizeX);  // Wrap X within Map
-			targetY = VMath.Zmod((int)target.y, FSizeY);  // Wrap Y within Map
-			
-			for( int i=0;i<predecessorMap.Length; i++) {
-				predecessorMap[i]=0;
-			}
 			openList.Clear();
 			closeList.Clear();
 			age ++;
 			
 			int currentNode;
-			int targetNode = Index(target);
-			openList.Add(Index(start));
+			
+			openList.Add(startNode);
 			bool found = false;
 			gMap[openList.Min()]=0;
 			ageMap[openList.Min()]=age;
 			while( maxCount>0 && openList.GetSize()>0 ) {				
 				currentNode = openList.RemoveMin();
+				ageMap[currentNode]=age;
 				if( currentNode==targetNode ) {
-					found = true;
+					found = true;					
 					break;
 				}
 				expandNode( currentNode );
 				closeList.Add(currentNode);
 				maxCount --;
 			}
-			FLogger.Log(LogType.Debug, "found= "+found+" "+(origMaxCount-maxCount));
 			if( found ) {
 				currentNode = targetNode;
-				var path = new List<Vector2D>();
-				while( currentNode!=0 ) {
-					path.Add(new Vector2D(currentNode%FSizeX, currentNode/FSizeY));
+				var path = new List<int>();
+				int count = 0;
+				while( currentNode!=0 && currentNode!=startNode ) {
+					path.Add(currentNode);
 					currentNode = predecessorMap[currentNode];
+					if( ageMap[currentNode]!=age ) {
+						currentNode = 0;
+					}
+					count ++;
 				}
 				path.Reverse();
 				return path;
@@ -226,23 +390,14 @@ namespace VVVV.Nodes
 			}
 		}
 		
-		private int Index( int x, int y ) {
+		public int Index( int x, int y ) {
 			return y*FSizeX+x;
-		}
-		private int Index( Vector2D pos ) {
-			return Index( (int)pos.x, (int)pos.y );
 		}
 		
 		public void SetLogger( ILogger logger ) {
 			FLogger = logger;
 		}
 		
-		public double GetG( Vector2D pos ) {
-			return gMap[Index(pos)];
-		}
-		public double GetF( Vector2D pos ) {
-			return fMap[Index(pos)];
-		}
 	}
 	
 	public delegate int Comparer(int a,int b);
