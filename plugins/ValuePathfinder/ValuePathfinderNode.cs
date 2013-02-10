@@ -154,9 +154,10 @@ namespace VVVV.Nodes
 		
 		public void Update(ISpread<ISpread<Vector2D>> result) {
 			foreach( int slotId in FSlots.Keys ) {
-				result[slotId].Add(new Vector2D(0,0));
+				
 				Slot slot = FSlots[slotId];
 				if( !slot.IsRendered() ) {
+					result[slotId].Add(new Vector2D(0,0));
 					Path path = GetPath( slot.PathId(), slot.maxHeapSize );
 					IEnumerable<int> pathToDisplay = path.GetData();
 //					IEnumerable<int> pathToDisplay = path.FindPath(FPathFinder)
