@@ -41,6 +41,10 @@ namespace VVVV.Nodes
 		[Output("Path")]
 		ISpread<ISpread<Vector2D>> FPathOut;
 		
+		[Output("PathValid")]
+		ISpread<bool> FPathValid;
+		
+		
 		[Import()]
 		ILogger FLogger;
 		
@@ -71,7 +75,7 @@ namespace VVVV.Nodes
 			for (int i=0;i<SpreadMax;i++) {
 				FPathfindingService.SetPath(i, FStart[i], FTarget[i], FMaxSize[i]);
 			}
-			FPathfindingService.Update(FPathOut);
+			FPathfindingService.Update(FPathOut, FPathValid);
 		}
 	}
 	
@@ -152,15 +156,13 @@ namespace VVVV.Nodes
 			FLogger.Log(LogType.Debug, "thread ended");
 		}
 		
-		public void Update(ISpread<ISpread<Vector2D>> result) {
+		public void Update(ISpread<ISpread<Vector2D>> result, ISpread<bool> valid) {
 			foreach( int slotId in FSlots.Keys ) {
-				
 				Slot slot = FSlots[slotId];
-				if( !slot.IsRendered() ) {
-					result[slotId].Add(new Vector2D(0,0));
+				valid[slotId] = slot.IsRendered();
+				if( !slot.IsRendered() ) {					
 					Path path = GetPath( slot.PathId(), slot.maxHeapSize );
 					IEnumerable<int> pathToDisplay = path.GetData();
-//					IEnumerable<int> pathToDisplay = path.FindPath(FPathFinder)
 					
 					if( pathToDisplay!=null ) {
 						result[slotId].SliceCount=0;						
@@ -172,10 +174,11 @@ namespace VVVV.Nodes
 						_rw.EnterWriteLock();
 						if( !FPathQueue.Contains(path) ) {
 							FPathQueue.Add(path);
+							result[slotId].Add(new Vector2D(0,0));
 						}
 						_rw.ExitWriteLock();
 					}					
-				} 
+				} 				
 			}
 		}
 		
