@@ -58,7 +58,8 @@ namespace VVVV.Nodes
 			SpreadMax = Math.Max(SpreadMax, FStart.SliceCount);
 			SpreadMax = Math.Max(SpreadMax, FTarget.SliceCount);
 			
-			FPathValid.SliceCount = FPathOut.SliceCount = SpreadMax;
+			FPathValid.SliceCount = SpreadMax;
+			FPathOut.SliceCount = SpreadMax;
 //			FLogger.Log(LogType.Debug, SpreadMax.ToString());
 			
 			bool mapHasChanged = false;
@@ -75,7 +76,7 @@ namespace VVVV.Nodes
 			for (int i=0;i<SpreadMax;i++) {
 				FPathfindingService.SetPath(i, FStart[i], FTarget[i], FMaxSize[i]);
 			}
-			FPathfindingService.Update(FPathOut, FPathValid);
+			FPathfindingService.Update(FPathOut, FPathValid, SpreadMax);
 		}
 		
 		public void Dispose() {			
@@ -162,8 +163,10 @@ namespace VVVV.Nodes
 			FLogger.Log(LogType.Debug, "thread ended");
 		}
 		
-		public void Update(ISpread<ISpread<Vector2D>> result, ISpread<bool> valid) {
+		public void Update(ISpread<ISpread<Vector2D>> result, ISpread<bool> valid, int SpreadMax) {
 			foreach( int slotId in FSlots.Keys ) {
+				if (slotId > SpreadMax) break;  // only calculate the amount of Paths that are necessary
+				
 				Slot slot = FSlots[slotId];
 				valid[slotId] = slot.IsRendered();
 				if( !slot.IsRendered() ) {					
