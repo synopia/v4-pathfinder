@@ -58,7 +58,7 @@ namespace VVVV.Nodes
 			SpreadMax = Math.Max(SpreadMax, FStart.SliceCount);
 			SpreadMax = Math.Max(SpreadMax, FTarget.SliceCount);
 			
-			FPathOut.SliceCount = SpreadMax;
+			FPathValid.SliceCount = FPathOut.SliceCount = SpreadMax;
 //			FLogger.Log(LogType.Debug, SpreadMax.ToString());
 			
 			bool mapHasChanged = false;
@@ -133,7 +133,7 @@ namespace VVVV.Nodes
 			
 			FLogger.Log(LogType.Debug, "thread started");
 			while( running ) {
-				Thread.Sleep(0);
+				Thread.Sleep(1);
 				_rw.EnterReadLock();
 				var e = FPathQueue.GetEnumerator();
 				Path path = null;
